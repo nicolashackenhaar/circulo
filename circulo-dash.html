@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard · Círculo de Proteção</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#09090f;--card:#111118;--card2:#18181f;--card3:#1f1f2e;
+  --border:#252535;--border2:#2e2e45;
+  --purple:#7c3aed;--pl:#c4b5fd;--pl2:#a78bfa;
+  --text:#eeeaf8;--muted:#8b7db0;--dim:#4e4568;
+  --green:#22c55e;--yellow:#eab308;--red:#ef4444;
+}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:24px;font-size:14px}
+
+/* Header */
+.ph{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:24px}
+.ph h1{font-size:1.2rem;font-weight:800;color:var(--pl);letter-spacing:-.02em;margin-bottom:2px}
+.ph p{font-size:.75rem;color:var(--dim)}
+nav{display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+nav a{color:var(--muted);text-decoration:none;padding:6px 13px;border:1px solid var(--border);border-radius:8px;font-size:.78rem;font-weight:500;transition:.15s;white-space:nowrap}
+nav a:hover,nav a.on{color:var(--pl);border-color:var(--purple);background:rgba(124,58,237,.08)}
+
+/* Cards */
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.c{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden}
+.c.hi{border-color:rgba(124,58,237,.45);background:linear-gradient(135deg,#111118 0%,#16102a 100%)}
+.c.hi::before{content:'';position:absolute;top:0;right:0;width:70px;height:70px;background:radial-gradient(circle,rgba(124,58,237,.2) 0%,transparent 70%)}
+.c-icon{font-size:1rem;margin-bottom:10px;opacity:.8}
+.c-label{font-size:.65rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.c-val{font-size:1.4rem;font-weight:800;letter-spacing:-.03em;line-height:1.1;word-break:break-word}
+.c-val.hi{color:var(--pl)}
+.c-val.muted{color:var(--muted)}
+.c-month{font-size:.66rem;color:var(--muted);font-weight:600;margin-top:3px;text-transform:capitalize}
+.c-sub{font-size:.7rem;color:var(--dim);margin-top:6px}
+.c-pills{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:99px;font-size:.65rem;font-weight:700}
+.pill-m{background:rgba(59,130,246,.13);color:#60a5fa}
+.pill-a{background:rgba(124,58,237,.18);color:var(--pl2)}
+
+/* Grid gráficos */
+.charts-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px}
+.box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px}
+.box-title{font-size:.8rem;font-weight:700;margin-bottom:3px}
+.box-sub{font-size:.68rem;color:var(--dim);margin-bottom:14px}
+/* Altura fixa no wrapper — Chart.js usa maintainAspectRatio:false */
+.chart-wrap{position:relative;height:200px;width:100%}
+
+/* Distribuição de planos */
+.dist-list{display:flex;flex-direction:column;gap:12px}
+.dist-item{display:flex;flex-direction:column;gap:5px}
+.dist-header{display:flex;justify-content:space-between;font-size:.76rem}
+.dist-label{font-weight:600}
+.dist-count{color:var(--muted);font-size:.7rem}
+.dist-bar-bg{height:5px;background:var(--card3);border-radius:99px;overflow:hidden}
+.dist-bar{height:100%;border-radius:99px}
+
+/* Recentes */
+.recentes-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rbox{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.rbox-title{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.rec-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)}
+.rec-row:last-child{border-bottom:none}
+.rec-num{font-size:.66rem;font-weight:700;color:var(--dim);min-width:18px}
+.rec-nome{font-size:.78rem;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rec-info{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.badge{display:inline-flex;padding:2px 7px;border-radius:99px;font-size:.6rem;font-weight:700;text-transform:uppercase;white-space:nowrap}
+.b-mensal-brl{background:rgba(59,130,246,.12);color:#60a5fa}
+.b-anual-brl{background:rgba(124,58,237,.2);color:var(--pl)}
+.b-mensal-usd{background:rgba(20,184,166,.12);color:#2dd4bf}
+.b-anual-usd{background:rgba(234,179,8,.14);color:#fbbf24}
+.rec-data{font-size:.64rem;color:var(--dim)}
+
+/* Responsivo */
+@media(max-width:860px){
+  .charts-grid{grid-template-columns:1fr}
+  .recentes-grid{grid-template-columns:1fr}
+  .cards{grid-template-columns:1fr 1fr}
+}
+@media(max-width:580px){
+  body{padding:14px}
+  .ph{flex-direction:column;gap:10px;margin-bottom:18px}
+  nav{justify-content:flex-start}
+  nav a{padding:5px 10px;font-size:.74rem}
+  .cards{gap:8px;margin-bottom:14px}
+  .c{padding:14px}
+  .c-val{font-size:1.1rem}
+  .box{padding:14px}
+  .rbox{padding:14px}
+  .chart-wrap{height:160px}
+}
+@media(max-width:380px){
+  .cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="ph">
+  <div>
+    <h1>✦ Círculo de Proteção</h1>
+    <p>Bruxas do Sul · Ciclo de Proteção · Dashboard</p>
+  </div>
+  <nav>
+    <a href="index.html">&larr; Home</a>
+    <a href="circulo-dash.html" class="on">Dashboard</a>
+    <a href="circulo.html">Assinantes</a>
+    <a href="circulo-plan.html">Planilha</a>
+  </nav>
+</div>
+
+<div class="cards" id="cards"></div>
+
+<div class="charts-grid">
+  <div class="box">
+    <div class="box-title">Receita por mês</div>
+    <div class="box-sub">Pagamentos confirmados · últimos 12 meses</div>
+    <div class="chart-wrap"><canvas id="chartReceita"></canvas></div>
+  </div>
+  <div class="box">
+    <div class="box-title">Distribuição de planos</div>
+    <div class="box-sub">Assinantes ativas</div>
+    <div class="dist-list" id="dist-planos"></div>
+  </div>
+</div>
+
+<div style="height:12px"></div>
+
+<div class="recentes-grid">
+  <div class="rbox">
+    <div class="rbox-title">✨ Assinantes mais antigas</div>
+    <div id="lista-antigas"></div>
+  </div>
+  <div class="rbox">
+    <div class="rbox-title">🆕 Entradas recentes</div>
+    <div id="lista-recentes"></div>
+  </div>
+</div>
+
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyANZSNqtRITmJ7LATTgiQNzKYCbYFQliFw",
+  authDomain:"finances-b28ec.firebaseapp.com",
+  projectId:"finances-b28ec",
+  storageBucket:"finances-b28ec.firebasestorage.app",
+  messagingSenderId:"602987379825",
+  appId:"1:602987379825:web:81389a0261143eaf166fd0"
+});
+const auth=firebase.auth();
+const db=firebase.firestore();
+db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+
+const ADMIN_UID = 'BkUNbjOgkINmBOVq7pWurtCZTSC2';
+const SHARED = ['contato.bruxariamoderna@gmail.com'];
+let currentUser = null;
+
+function userRef(){
+  if(SHARED.includes(currentUser.email)) return db.collection('users').doc(ADMIN_UID);
+  return db.collection('users').doc(currentUser.uid);
+}
+
+let assinantes = [];
+let transacoes = [];
+
+function startListeners(){
+  const ur=userRef();
+  ur.collection('cp_assinantes').onSnapshot(snap=>{
+    assinantes=snap.docs.map(d=>({id:d.id,...d.data()}));
+    render();
+  });
+  ur.collection('cp_transacoes').onSnapshot(snap=>{
+    transacoes=snap.docs.map(d=>({id:d.id,...d.data()}));
+    render();
+  });
+}
+
+function getA(){ return assinantes; }
+function getT(){ return transacoes; }
+
+function fBRL(v){return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+function fData(s){if(!s)return'—';const[y,m,d]=s.split('-');return`${d}/${m}/${y}`}
+function nomeMes(y,m){return new Date(y,m-1,1).toLocaleString('pt-BR',{month:'long'})}
+function nomeMesCurto(y,m){
+  return new Date(y,m-1,1).toLocaleString('pt-BR',{month:'short'})
+    .replace('.','').replace(/^\w/,c=>c.toUpperCase());
+}
+
+const PLANOS={
+  'mensal-brl':{label:'Mensal R$',periodo:'mensal'},
+  'anual-brl': {label:'Anual R$', periodo:'anual'},
+  'mensal-usd':{label:'Mensal $', periodo:'mensal'},
+  'anual-usd': {label:'Anual $',  periodo:'anual'},
+};
+function getPeriodo(p){return(PLANOS[p]||{}).periodo||'mensal'}
+function getLabelPlano(p){return(PLANOS[p]||{}).label||p}
+
+function getSegmentos(a){
+  const base=[{plano:a._planoInicial||a.plano,valor:a._valorInicial||a.valor,dataInicio:a.dataInicio}];
+  return [...base,...(a.historicoMudancas||[])].sort((x,y)=>x.dataInicio.localeCompare(y.dataInicio));
+}
+
+function projMesSeguinte(assinantes){
+  const hoje=new Date();
+  const nm=hoje.getMonth()+2,na=nm>12?hoje.getFullYear()+1:hoje.getFullYear();
+  const nmReal=nm>12?1:nm;
+  const nmStr=`${na}-${String(nmReal).padStart(2,'0')}`;
+  return assinantes.filter(a=>a.status==='ativa').reduce((acc,a)=>{
+    if(getPeriodo(a.plano)==='mensal') return acc+a.valor;
+    const segs=getSegmentos(a).filter(s=>s.plano!=='cancelado');
+    const ult=segs[segs.length-1]||{dataInicio:a.dataInicio};
+    const inicio=new Date(ult.dataInicio+'T12:00:00');
+    let r=new Date(inicio);
+    while(r<=hoje) r.setFullYear(r.getFullYear()+1);
+    const rStr=`${r.getFullYear()}-${String(r.getMonth()+1).padStart(2,'0')}`;
+    return acc+(rStr===nmStr?a.valor:0);
+  },0);
+}
+
+function totalMes(ts,y,m){
+  const ms=`${y}-${String(m).padStart(2,'0')}`;
+  return ts.filter(t=>t.mesRef===ms&&t.status==='pago').reduce((s,t)=>s+t.valor,0);
+}
+
+function render(){
+  const as=getA(), ts=getT();
+  const now=new Date(), ano=now.getFullYear(), mes=now.getMonth()+1;
+  const mesAnt=mes===1?12:mes-1, anoAnt=mes===1?ano-1:ano;
+  const nmProx=mes===12?1:mes+1, nyProx=mes===12?ano+1:ano;
+  const ativas=as.filter(a=>a.status==='ativa');
+  const nMensais=ativas.filter(a=>getPeriodo(a.plano)==='mensal').length;
+  const nAnuais=ativas.filter(a=>getPeriodo(a.plano)==='anual').length;
+  const meAtual=totalMes(ts,ano,mes);
+  const meAnterior=totalMes(ts,anoAnt,mesAnt);
+  const meProximo=projMesSeguinte(as);
+
+  // --- Cards ---
+  document.getElementById('cards').innerHTML=`
+    <div class="c hi">
+      <div class="c-icon">💰</div>
+      <div class="c-label">Este mês</div>
+      <div class="c-val hi">${fBRL(meAtual)}</div>
+      <div class="c-month">${nomeMes(ano,mes)}</div>
+      <div class="c-sub">recebido</div>
+    </div>
+    <div class="c">
+      <div class="c-icon">📅</div>
+      <div class="c-label">Próximo mês</div>
+      <div class="c-val">${fBRL(meProximo)}</div>
+      <div class="c-month">${nomeMes(nyProx,nmProx)}</div>
+      <div class="c-sub">projetado</div>
+    </div>
+    <div class="c">
+      <div class="c-icon">🕓</div>
+      <div class="c-label">Mês anterior</div>
+      <div class="c-val muted">${fBRL(meAnterior)}</div>
+      <div class="c-month">${nomeMes(anoAnt,mesAnt)}</div>
+      <div class="c-sub">recebido</div>
+    </div>
+    <div class="c">
+      <div class="c-icon">✨</div>
+      <div class="c-label">Ativas</div>
+      <div class="c-val">${ativas.length}</div>
+      <div class="c-sub">
+        <div class="c-pills">
+          <span class="pill pill-m">◉ ${nMensais} mensais</span>
+          <span class="pill pill-a">◉ ${nAnuais} anuais</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // --- Gráfico: últimos 12 meses ---
+  const meses12=[];
+  for(let i=11;i>=0;i--){
+    let m=mes-i, y=ano;
+    while(m<=0){m+=12;y--;}
+    meses12.push({y,m});
+  }
+  const receitaData=meses12.map(({y,m})=>totalMes(ts,y,m));
+  const labels=meses12.map(({y,m})=>nomeMesCurto(y,m)+(y!==ano?` ${y}`:''));
+
+  const ctx=document.getElementById('chartReceita').getContext('2d');
+  if(window._chartR) window._chartR.destroy();
+  window._chartR=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{
+        label:'Receita',
+        data:receitaData,
+        backgroundColor:receitaData.map((_,i)=>i===11?'rgba(124,58,237,.85)':'rgba(124,58,237,.28)'),
+        borderColor:receitaData.map((_,i)=>i===11?'#7c3aed':'rgba(124,58,237,.4)'),
+        borderWidth:1,
+        borderRadius:4,
+        borderSkipped:false,
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,   // altura controlada pelo CSS do wrapper
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#18181f',
+          borderColor:'#2e2e45',
+          borderWidth:1,
+          titleColor:'#c4b5fd',
+          bodyColor:'#eeeaf8',
+          padding:10,
+          callbacks:{label:c=>fBRL(c.parsed.y)}
+        }
+      },
+      scales:{
+        x:{
+          grid:{display:false},
+          ticks:{color:'#4e4568',font:{size:10},maxRotation:45}
+        },
+        y:{
+          grid:{color:'rgba(255,255,255,.04)'},
+          ticks:{
+            color:'#4e4568',font:{size:10},
+            callback:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v
+          },
+          beginAtZero:true
+        }
+      }
+    }
+  });
+
+  // --- Distribuição de planos ---
+  const grupos=[
+    {key:'mensal-brl',label:'Mensal R$',cor:'#60a5fa'},
+    {key:'anual-brl', label:'Anual R$', cor:'#a78bfa'},
+    {key:'mensal-usd',label:'Mensal $', cor:'#2dd4bf'},
+    {key:'anual-usd', label:'Anual $',  cor:'#fbbf24'},
+  ];
+  const tot=ativas.length||1;
+  document.getElementById('dist-planos').innerHTML=grupos.map(g=>{
+    const n=ativas.filter(a=>a.plano===g.key).length;
+    const pct=Math.round(n/tot*100);
+    return `<div class="dist-item">
+      <div class="dist-header">
+        <span class="dist-label" style="color:${g.cor}">${g.label}</span>
+        <span class="dist-count">${n} · ${pct}%</span>
+      </div>
+      <div class="dist-bar-bg"><div class="dist-bar" style="width:${pct}%;background:${g.cor}"></div></div>
+    </div>`;
+  }).join('');
+
+  // --- Listas ---
+  const numCod=a=>parseInt((a.codigo||'').match(/\d+$/)?.[0]||'9999');
+  const antigas=[...ativas].sort((a,b)=>numCod(a)-numCod(b)).slice(0,5);
+  const recentes=[...ativas].sort((a,b)=>b.dataInicio.localeCompare(a.dataInicio)).slice(0,5);
+
+  const rowHtml=(a,i)=>`
+    <div class="rec-row">
+      <span class="rec-num">${String(i+1).padStart(2,'0')}</span>
+      <span class="rec-nome" title="${a.nome}">${a.nome}</span>
+      <span class="rec-info">
+        <span class="badge b-${a.plano}">${getLabelPlano(a.plano)}</span>
+        <span class="rec-data">${fData(a.dataInicio)}</span>
+      </span>
+    </div>`;
+
+  document.getElementById('lista-antigas').innerHTML=antigas.map(rowHtml).join('');
+  document.getElementById('lista-recentes').innerHTML=recentes.map(rowHtml).join('');
+}
+
+auth.onAuthStateChanged(u=>{
+  if(!u){window.location.href='index.html';return;}
+  currentUser=u;
+  startListeners();
+});
+</script>
+</body>
+</html>
